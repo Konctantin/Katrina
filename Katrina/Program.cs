@@ -17,7 +17,7 @@ namespace Katrina
     public class Program
     {
         const byte SNIFFER_ID    = 0x20;
-        const ushort PKT_VERSION = 0x0301;
+        const ushort PKT_VERSION = 0x0301; //3.1
 
         static object lockObject = new object();
 
@@ -42,6 +42,8 @@ namespace Katrina
             Console.ForegroundColor = ConsoleColor.Cyan;
             consoleEventHandler = new WinApi.ConsoleEventDelegate(ConsoleEventCallback);
             WinApi.SetConsoleCtrlHandler(consoleEventHandler, true);
+
+            Console.WriteLine("Welcome to Katrina, a WoW debugger sniffer.\n");
 
             var processList = Process.GetProcessesByName("wow")
                     //.Concat(Process.GetProcessesByName("wow-64"))
@@ -99,8 +101,7 @@ namespace Katrina
 
             Console.WriteLine("Used process by PID: {0}", process.Id);
 
-            Offsets.Load(process.MainModule.FileVersionInfo.ProductBuildPart);
-            Process.EnterDebugMode();
+            Offsets.Load(process.MainModule.FileVersionInfo.FilePrivatePart);
             debugger = new Debugger(process);
 
             // offset + 1
@@ -116,14 +117,12 @@ namespace Katrina
                 writer.Flush();
                 writer.Close();
             }
-
-            Process.LeaveDebugMode();
         }
 
         static void Send2(Process process, CONTEXT context)
         {
-            int ptr = process.Read<int>(new IntPtr(context.Esp + Offsets.Send_ds));
-            var dataStore  = process.Read<CDataStore>(new IntPtr(ptr));
+            var ptr = process.Read<IntPtr>(new IntPtr(context.Esp + Offsets.Send_ds));
+            var dataStore  = process.Read<CDataStore>(ptr);
             var packet     = process.ReadBytes(dataStore.buffer, dataStore.size);
             var connection = process.Read<int>(new IntPtr(context.Esp + Offsets.Send_ds + 4));
 
@@ -135,8 +134,8 @@ namespace Katrina
 
         static void ProcessMessage(Process process, CONTEXT context)
         {
-            int ptr = process.Read<int>(new IntPtr(context.Esp + Offsets.Recv_ds));
-            var dataStore  = process.Read<CDataStore>(new IntPtr(ptr));
+            var ptr = process.Read<IntPtr>(new IntPtr(context.Esp + Offsets.Recv_ds));
+            var dataStore  = process.Read<CDataStore>(ptr);
             var packet     = process.ReadBytes(dataStore.buffer, dataStore.size);
             var connection = process.Read<int>(new IntPtr(context.Esp + Offsets.Recv_ds + 4));
 
@@ -153,7 +152,7 @@ namespace Katrina
                 var locale = "xxXX";
                 if (Offsets.Locale > 0)
                 {
-                    Encoding.ASCII.GetString(
+                    locale = Encoding.ASCII.GetString(
                         process.ReadBytes(
                             process.Rebase(Offsets.Locale), 4)
                             .Reverse().ToArray()
@@ -187,8 +186,8 @@ namespace Katrina
             writer.Write(packet);                   // data
             writer.Flush();
 
-            Console.WriteLine("{0}: Size: {1}, Opcode: 0x{2:X4} ({2})",
-                direction, packet.Length, BitConverter.ToInt32(packet, 0));
+            //Console.WriteLine("{0}: Size: {1}, Opcode: 0x{2:X4} ({2})",
+            //    direction, packet.Length, BitConverter.ToInt32(packet, 0));
         }
     }
 }
