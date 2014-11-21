@@ -106,8 +106,8 @@ namespace Katrina
 
             // offset + 1
             // skip: push ebp
-            debugger.SetBreakPoint((uint)process.Rebase(Offsets.Send_2 + 1).ToInt32(), Send2);
-            debugger.SetBreakPoint((uint)process.Rebase(Offsets.Recive + 1).ToInt32(), ProcessMessage);
+            debugger.SetBreakPoint((uint)process.Rebase(Offsets.Send_2).ToInt32(), Send2);
+            debugger.SetBreakPoint((uint)process.Rebase(Offsets.Recive).ToInt32(), ProcessMessage);
 
             // debug loop
             debugger.Run();

@@ -46,11 +46,9 @@ namespace Katrina
     public struct CONTEXT
     {
         public ContextFlags ContextFlags; //set this to an appropriate value 
-        // Retrieved by CONTEXT_DEBUG_REGISTERS 
-        public uint Dr0;
-        public uint Dr1;
-        public uint Dr2;
-        public uint Dr3;
+        // Retrieved by CONTEXT_DEBUG_REGISTERS
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+        public uint[] Dr;
         public uint Dr6;
         public uint Dr7;
         // Retrieved by CONTEXT_FLOATING_POINT 

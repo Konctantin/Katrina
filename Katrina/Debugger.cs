@@ -15,6 +15,7 @@ namespace Katrina
         private bool isDebugging = true;
         private Process process = null;
         private ProcessThread thread = null;
+        private IntPtr hThread = IntPtr.Zero;
 
         public Debugger(Process process)
         {
@@ -22,19 +23,19 @@ namespace Katrina
                 throw new ArgumentNullException("process");
 
             this.process = process;
-            this.thread = this.process.Threads[0];
+            this.thread  = this.process.Threads[0];
+            this.hThread = OpenThread(0x1F03FF, false, thread.Id);
+
+            if (this.hThread == IntPtr.Zero)
+                throw new Win32Exception();
         }
 
-        private void ProcessThreadContext(int threadId, ContextFlags flag, ThreadContextHandler handler)
+        private void ProcessThreadContext(int threadId, ContextFlags flag, ThreadContextHandler handler, bool isReadOnly = false)
         {
             if (handler == null)
                 throw new ArgumentNullException("handler");
 
             var context = new CONTEXT { ContextFlags = flag };
-
-            var hThread = OpenThread(0x1F03FF, false, thread.Id);
-            if (hThread == IntPtr.Zero)
-                throw new Win32Exception();
 
             if (SuspendThread(hThread) == 0xFFFFFFFF)
                 throw new Win32Exception();
@@ -44,8 +45,11 @@ namespace Katrina
 
             handler(ref context);
 
-            if (!SetThreadContext(hThread, ref context))
-                throw new Win32Exception();
+            if (!isReadOnly)
+            {
+                if (!SetThreadContext(hThread, ref context))
+                    throw new Win32Exception();
+            }
 
             if (ResumeThread(hThread) == 0xFFFFFFFF)
                 throw new Win32Exception();
@@ -71,12 +75,11 @@ namespace Katrina
                 else if (debugEvent.IsSingleStep)
                 {
                     ProcessThreadContext(debugEvent.ThreadId, ContextFlags.Full, (ref CONTEXT context) => {
-                        if (this.thread.Id == debugEvent.ThreadId && breakpoints.ContainsKey(context.Eip))
+                        if (this.thread.Id == debugEvent.ThreadId && breakpoints.ContainsKey(debugEvent.ExceptionAddress))
                         {
-                            breakpoints[context.Eip](process, context); // exec handler
+                            breakpoints[debugEvent.ExceptionAddress](process, context); // exec handler
                         }
-                        context.EFlags |= 0x10000;
-                    });
+                    }, true);
                     dbgStatus = 0x00010002; // DBG_CONTINUE
                 }
 
@@ -107,15 +110,7 @@ namespace Katrina
                 if (index >= 4)
                     throw new Exception("All hardware breakpoint registers are already being used");
 
-                switch (index)
-                {
-                    case 0: context.Dr0 = address; break;
-                    case 1: context.Dr1 = address; break;
-                    case 2: context.Dr2 = address; break;
-                    case 3: context.Dr3 = address; break;
-                    default: throw new Exception("index has bogus value!");
-                }
-
+                context.Dr[index] = address;
                 context.Dr7 |= 1u << (index * 2);
                 breakpoints[address] = handler;
             });
@@ -124,10 +119,7 @@ namespace Katrina
         public void RemoveBreakPoint()
         {
             ProcessThreadContext(thread.Id, ContextFlags.DebugRegisters, (ref CONTEXT context) => {
-                context.Dr0 = 0u;
-                context.Dr1 = 0u;
-                context.Dr2 = 0u;
-                context.Dr3 = 0u;
+                context.Dr = new uint[4];
                 context.Dr7 = 0u;
             });
             breakpoints.Clear();
